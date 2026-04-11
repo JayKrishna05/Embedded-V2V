@@ -46,24 +46,43 @@ float Q = 0.08;
 float R = 3;
 
 // ---------- FUNCTIONS ----------
-float getDistance(int rssi) {
-  float d = pow(10.0, (A - rssi) / (10.0 * n));
-  if (d < 0.2) d = 0.2;
-  return d;
+float predict_distance(float rssi) {
+
+  // ---------- Clamp RSSI (important) ----------
+  rssi = constrain(rssi, -100, -20);
+
+  // ---------- Log model (close range) ----------
+  float A = -58;
+  float n = 2.5;
+  float d_log = pow(10.0, (A - rssi) / (10.0 * n));
+
+  // ---------- Polynomial model (far range) ----------
+  float a = 0.00867766;
+  float b = 0.85337;
+  float c = 20.5131;
+  float d_poly = a * rssi * rssi + b * rssi + c;
+
+  float d;
+
+  // ---------- Region selection ----------
+  if (rssi > -55) {
+    // Close range → log
+    d = d_log;
+  }
+  else if (rssi < -60) {
+    // Far range → polynomial
+    d = d_poly;
+  }
+  else {
+    // ---------- Smooth blending (-60 to -55) ----------
+    float t = (rssi + 60) / 5.0;   // maps [-60 → -55] → [0 → 1]
+    d = t * d_log + (1 - t) * d_poly;
+  }
+
+  // ---------- Final clamp ----------
+  return constrain(d, 0.05, 30.0);
 }
-float predict_distance(float rssi) { //ml random forest regression based prediction
-    float a = 0.009403;
-    float b = 1.0079;
-    float c = 27.6746;
 
-    float distance = a * rssi * rssi + b * rssi + c;
-
-    // Safety clamp
-    if (distance < 0.2) distance = 0.2;
-    if (distance > 20.0) distance = 20.0;
-
-    return distance;
-}
 int getRSSI() {
   wifi_sta_list_t list;
   if (esp_wifi_ap_get_sta_list(&list) == ESP_OK && list.num > 0) {
@@ -123,8 +142,7 @@ void taskProcessing(void *pvParameters) {
   while (1) {
 
     int rssi = getRSSI();
-    //float d = getDistance(rssi); local model distance calculation
-    float d=predict_distance(rssi);
+    float d=predict_distance(rssi); 
 
     // Kalman Filter
     P += Q;
