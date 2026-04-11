@@ -51,7 +51,19 @@ float getDistance(int rssi) {
   if (d < 0.2) d = 0.2;
   return d;
 }
+float predict_distance(float rssi) { //ml random forest regression based prediction
+    float a = 0.009403;
+    float b = 1.0079;
+    float c = 27.6746;
 
+    float distance = a * rssi * rssi + b * rssi + c;
+
+    // Safety clamp
+    if (distance < 0.2) distance = 0.2;
+    if (distance > 20.0) distance = 20.0;
+
+    return distance;
+}
 int getRSSI() {
   wifi_sta_list_t list;
   if (esp_wifi_ap_get_sta_list(&list) == ESP_OK && list.num > 0) {
@@ -111,7 +123,8 @@ void taskProcessing(void *pvParameters) {
   while (1) {
 
     int rssi = getRSSI();
-    float d = getDistance(rssi);
+    //float d = getDistance(rssi); local model distance calculation
+    float d=predict_distance(rssi);
 
     // Kalman Filter
     P += Q;
